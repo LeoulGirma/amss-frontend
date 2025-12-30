@@ -2,152 +2,228 @@
 
 This document describes how to set up and use the CI/CD pipeline for the AMSS Frontend.
 
+## Quick Start (TL;DR)
+
+**Repository:** https://github.com/LeoulGirma/amss-frontend
+
+**Add these secrets** at https://github.com/LeoulGirma/amss-frontend/settings/secrets/actions:
+
+| Secret | Value |
+|--------|-------|
+| `SERVER_HOST` | `51.79.85.92` |
+| `SERVER_USER` | `ubuntu` |
+| `SSH_PRIVATE_KEY` | Contents of `~/.ssh/github_deploy` |
+
+**Generate SSH key** (one-time):
+```bash
+ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/github_deploy -N ""
+cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys
+cat ~/.ssh/github_deploy  # Copy this to SSH_PRIVATE_KEY secret
+```
+
+**That's it!** Every push to `master` will auto-deploy to https://amss.leoulgirma.com
+
+---
+
 ## Overview
 
-The pipeline consists of two workflows:
+The pipeline consists of three workflows:
 
-1. **CI (Continuous Integration)** - Runs on every push and PR
-   - Linting (ESLint)
-   - Type checking (TypeScript)
-   - Building
-   - Testing
-
-2. **Deploy (Continuous Deployment)** - Runs after CI passes on `main` branch
-   - Downloads build artifacts
-   - Deploys to production server via SSH
-   - Restarts Kubernetes deployment
-   - Verifies deployment health
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| **CI** | Push/PR to `master` | Lint, type check, build, test |
+| **Deploy** | Push to `master` (after CI) | Deploy to production |
+| **PR Check** | Pull requests | Bundle analysis, security audit |
 
 ## Pipeline Flow
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Push/PR   │────▶│    Lint     │────▶│    Build    │────▶│    Test     │
+│   Push/PR   │────▶│    Lint     │────▶│  TypeCheck  │────▶│    Build    │
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
                                                                    │
                                                                    ▼
-                                                            ┌─────────────┐
-                                                            │   Deploy    │
-                                                            │ (main only) │
-                                                            └─────────────┘
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Verify    │◀────│   Restart   │◀────│   Deploy    │◀────│    Test     │
+│   Health    │     │     K8s     │     │    Files    │     │             │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
 ```
+
+## Current Configuration
+
+### Production Environment
+
+| Setting | Value |
+|---------|-------|
+| **Server** | `51.79.85.92` |
+| **User** | `ubuntu` |
+| **Deploy Path** | `/var/www/amss` |
+| **K8s Namespace** | `amss-uat` |
+| **K8s Deployment** | `amss-frontend` |
+| **Live URL** | https://amss.leoulgirma.com |
+| **Health Check** | https://amss.leoulgirma.com/health |
+
+### GitHub Repository
+
+| Setting | Value |
+|---------|-------|
+| **Repository** | https://github.com/LeoulGirma/amss-frontend |
+| **Branch** | `master` |
+| **Actions** | https://github.com/LeoulGirma/amss-frontend/actions |
+| **Secrets** | https://github.com/LeoulGirma/amss-frontend/settings/secrets/actions |
+
+---
 
 ## Required GitHub Secrets
 
-Navigate to your repository → Settings → Secrets and variables → Actions
+Navigate to: **Repository → Settings → Secrets and variables → Actions**
 
-### Required Secrets
+### Secrets List
 
-| Secret Name | Description | Example |
-|-------------|-------------|---------|
-| `SSH_PRIVATE_KEY` | Private SSH key for server access | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
-| `SERVER_HOST` | Production server IP/hostname | `51.79.85.92` |
+| Secret Name | Description | Current Value |
+|-------------|-------------|---------------|
+| `SERVER_HOST` | Production server IP | `51.79.85.92` |
 | `SERVER_USER` | SSH username | `ubuntu` |
+| `SSH_PRIVATE_KEY` | Ed25519 private key | `~/.ssh/github_deploy` |
 
 ### Setting Up SSH Keys
 
-1. **Generate a new SSH key pair** (if you don't have one):
+1. **Generate a deploy key** on the server:
    ```bash
-   ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/github_deploy_key
+   ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/github_deploy -N ""
    ```
 
-2. **Add the public key to the server**:
+2. **Add public key to authorized_keys**:
    ```bash
-   # On your local machine
-   cat ~/.ssh/github_deploy_key.pub
-
-   # On the server, add to authorized_keys
-   echo "ssh-ed25519 AAAA... github-actions-deploy" >> ~/.ssh/authorized_keys
+   cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys
    ```
 
-3. **Add the private key to GitHub Secrets**:
+3. **Copy private key to GitHub**:
    ```bash
-   cat ~/.ssh/github_deploy_key
-   # Copy the entire output including BEGIN and END lines
+   cat ~/.ssh/github_deploy
    ```
+   Copy the entire output (including `-----BEGIN/END-----` lines) to the `SSH_PRIVATE_KEY` secret.
 
-   Go to GitHub → Repository → Settings → Secrets → New repository secret
-   - Name: `SSH_PRIVATE_KEY`
-   - Value: Paste the private key
+### Verify Key Setup
 
-4. **Add server details**:
-   - Name: `SERVER_HOST`, Value: `51.79.85.92`
-   - Name: `SERVER_USER`, Value: `ubuntu`
+```bash
+# Test the key works locally
+ssh -i ~/.ssh/github_deploy ubuntu@51.79.85.92 "echo 'SSH OK'"
+```
 
-## Environment Protection Rules (Recommended)
-
-For additional security, set up environment protection:
-
-1. Go to Repository → Settings → Environments
-2. Create a `production` environment
-3. Add protection rules:
-   - Required reviewers (for manual approval)
-   - Wait timer (optional delay before deploy)
-   - Deployment branches (restrict to `main`)
-
-## Manual Deployment
-
-You can trigger a deployment manually:
-
-1. Go to Actions → Deploy to Production
-2. Click "Run workflow"
-3. Select the branch and environment
-4. Click "Run workflow"
+---
 
 ## Workflow Files
 
-### CI Workflow (`.github/workflows/ci.yml`)
+### 1. CI Workflow (`.github/workflows/ci.yml`)
 
-Triggers on:
-- Push to `main`
-- Pull requests to `main`
+**Triggers:** Push to `master`, Pull requests to `master`
 
-Jobs:
-1. `lint-and-build`: Lints, type checks, and builds the project
-2. `test`: Runs test suite (after build succeeds)
+**Jobs:**
+- `lint-and-build`: ESLint, TypeScript check, Vite build
+- `test`: Run test suite
 
-### Deploy Workflow (`.github/workflows/deploy.yml`)
+**Steps:**
+```
+Checkout → Setup Node 20 → npm ci → Lint → TypeCheck → Build → Upload Artifacts → Test
+```
 
-Triggers on:
-- Push to `main` (after CI passes)
-- Manual trigger via `workflow_dispatch`
+### 2. Deploy Workflow (`.github/workflows/deploy.yml`)
 
-Jobs:
-1. `ci`: Runs the CI workflow
-2. `deploy`: Deploys to production server
+**Triggers:** Push to `master` (after CI passes), Manual dispatch
+
+**Jobs:**
+- `ci`: Runs CI workflow first
+- `deploy`: SSH deploy to production
+
+**Steps:**
+```
+Download Artifacts → Setup SSH → Add Known Hosts → Rsync Files → Restart K8s → Verify Health
+```
+
+### 3. PR Check Workflow (`.github/workflows/pr-check.yml`)
+
+**Triggers:** Pull requests to `master`
+
+**Jobs:**
+- `pr-info`: Build analysis, bundle size comment
+- `security-check`: npm audit, secret scanning
+
+---
+
+## Manual Operations
+
+### Trigger Manual Deployment
+
+1. Go to https://github.com/LeoulGirma/amss-frontend/actions
+2. Click **"Deploy to Production"**
+3. Click **"Run workflow"**
+4. Select branch and click **"Run workflow"**
+
+### Deploy from Command Line
+
+```bash
+cd /home/ubuntu/amss-frontend
+
+# Full deploy
+./scripts/deploy.sh
+
+# Build only
+./scripts/deploy.sh --build-only
+
+# Deploy only (skip build)
+./scripts/deploy.sh --deploy-only
+
+# Check status
+./scripts/deploy.sh --status
+
+# View logs
+./scripts/deploy.sh --logs
+```
+
+### Rollback Deployment
+
+```bash
+# View deployment history
+kubectl rollout history deployment/amss-frontend -n amss-uat
+
+# Rollback to previous version
+kubectl rollout undo deployment/amss-frontend -n amss-uat
+
+# Rollback to specific revision
+kubectl rollout undo deployment/amss-frontend -n amss-uat --to-revision=2
+```
+
+---
 
 ## Local Development
 
-### Running CI Checks Locally
+### Run CI Checks Locally
 
 ```bash
 # Install dependencies
 npm ci
 
-# Run linting
-npm run lint
+# Run all checks
+npm run lint && npm run typecheck && npm run build && npm test
 
-# Type check
-npx tsc --noEmit
-
-# Build
-npm run build
-
-# Run tests
-npm test
+# Fix lint issues
+npm run lint:fix
 ```
 
-### Testing Deployment Script
+### Available Scripts
 
-```bash
-# Use the deploy script
-./scripts/deploy.sh
+| Script | Command | Description |
+|--------|---------|-------------|
+| `dev` | `npm run dev` | Start dev server |
+| `build` | `npm run build` | Production build |
+| `lint` | `npm run lint` | Run ESLint |
+| `lint:fix` | `npm run lint:fix` | Fix lint issues |
+| `typecheck` | `npm run typecheck` | TypeScript check |
+| `test` | `npm test` | Run tests |
+| `deploy` | `npm run deploy` | Run deploy script |
 
-# Or run individual steps
-./scripts/deploy.sh --build-only
-./scripts/deploy.sh --deploy-only
-./scripts/deploy.sh --status
-```
+---
 
 ## Troubleshooting
 
@@ -155,19 +231,18 @@ npm test
 
 **ESLint errors:**
 ```bash
-# Fix auto-fixable issues
-npm run lint -- --fix
+npm run lint:fix
+git add -A && git commit -m "Fix lint errors"
 ```
 
 **TypeScript errors:**
 ```bash
-# Check specific errors
-npx tsc --noEmit
+npm run typecheck
+# Review and fix type errors
 ```
 
 **Build failures:**
 ```bash
-# Clear cache and rebuild
 rm -rf node_modules dist
 npm ci
 npm run build
@@ -175,64 +250,109 @@ npm run build
 
 ### Deployment Failures
 
-**SSH connection issues:**
-- Verify the SSH key is correct
-- Check server firewall allows SSH (port 22)
-- Ensure the public key is in `~/.ssh/authorized_keys` on server
-
-**Kubernetes errors:**
+**SSH connection refused:**
 ```bash
-# Check pod status
-kubectl get pods -n amss-uat
+# Check SSH service
+sudo systemctl status sshd
 
-# Check logs
-kubectl logs -n amss-uat -l app=amss-frontend
+# Check firewall
+sudo ufw status
 
-# Check events
-kubectl get events -n amss-uat --sort-by='.lastTimestamp'
+# Test key manually
+ssh -i ~/.ssh/github_deploy -v ubuntu@51.79.85.92
 ```
 
-**Rsync failures:**
-- Ensure deploy path exists: `/var/www/amss`
-- Check directory permissions
-
-## Monitoring Deployments
-
-### GitHub Actions UI
-- View workflow runs at: `https://github.com/<owner>/<repo>/actions`
-- Each run shows detailed logs for each step
-
-### Server-side Verification
+**Rsync permission denied:**
 ```bash
-# Check deployment status
+# Check directory ownership
+ls -la /var/www/amss
+
+# Fix permissions
+sudo chown -R ubuntu:ubuntu /var/www/amss
+```
+
+**Kubernetes restart fails:**
+```bash
+# Check pod status
 kubectl get pods -n amss-uat -l app=amss-frontend
 
-# Check health endpoint
-curl https://amss.leoulgirma.com/health
+# Check events
+kubectl get events -n amss-uat --sort-by='.lastTimestamp' | tail -20
 
-# View recent logs
+# Check logs
 kubectl logs -n amss-uat -l app=amss-frontend --tail=50
 ```
 
+### Health Check Fails
+
+```bash
+# Check pod is running
+kubectl get pods -n amss-uat -l app=amss-frontend
+
+# Check service
+kubectl get svc -n amss-uat amss-frontend
+
+# Check ingress
+kubectl get ingress -n amss-uat amss-frontend
+
+# Test health endpoint
+curl -v https://amss.leoulgirma.com/health
+```
+
+---
+
+## Monitoring
+
+### GitHub Actions
+
+- **All Runs:** https://github.com/LeoulGirma/amss-frontend/actions
+- **CI Runs:** https://github.com/LeoulGirma/amss-frontend/actions/workflows/ci.yml
+- **Deploy Runs:** https://github.com/LeoulGirma/amss-frontend/actions/workflows/deploy.yml
+
+### Server Monitoring
+
+```bash
+# Deployment status
+kubectl get pods -n amss-uat -l app=amss-frontend -w
+
+# Resource usage
+kubectl top pods -n amss-uat
+
+# Recent logs
+kubectl logs -n amss-uat -l app=amss-frontend --tail=100 -f
+```
+
+---
+
 ## Security Best Practices
 
-1. **Never commit secrets** - Use GitHub Secrets for all sensitive data
-2. **Use environment protection** - Require approvals for production deploys
-3. **Rotate SSH keys** - Periodically rotate deployment keys
-4. **Limit SSH access** - The deploy key should only have access to required directories
-5. **Monitor deployments** - Review deployment logs for anomalies
+1. **Never commit secrets** - Use GitHub Secrets
+2. **Rotate SSH keys** - Regenerate deploy keys periodically
+3. **Use environment protection** - Add required reviewers for production
+4. **Monitor deployments** - Review Actions logs for anomalies
+5. **Limit key permissions** - Deploy key only needs access to `/var/www/amss`
 
-## Adding New Environments
+---
+
+## Adding Staging Environment
 
 To add a staging environment:
 
-1. Create new secrets with `_STAGING` suffix:
-   - `SSH_PRIVATE_KEY_STAGING`
+1. **Create new secrets:**
    - `SERVER_HOST_STAGING`
    - `SERVER_USER_STAGING`
+   - `SSH_PRIVATE_KEY_STAGING`
 
-2. Modify `deploy.yml` to handle environment selection
+2. **Create staging namespace:**
+   ```bash
+   kubectl create namespace amss-staging
+   ```
 
-3. Create a new Kubernetes namespace (e.g., `amss-staging`)
+3. **Deploy staging manifests:**
+   ```bash
+   kubectl apply -f k8s/frontend.yaml -n amss-staging
+   ```
 
-4. Update ingress for staging domain
+4. **Update deploy.yml** to support environment selection
+
+5. **Create staging ingress** with staging domain
