@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* shadcn/ui base tokens */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 215 16% 47%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 217 91% 60%;
+    --radius: 0.5rem;
+
+    /* AMSS Aviation Status Colors */
+    --operational: 160 84% 39%;
+    --operational-light: 152 76% 91%;
+    --operational-dark: 163 94% 20%;
+
+    --maintenance: 38 92% 50%;
+    --maintenance-light: 48 96% 89%;
+    --maintenance-dark: 32 81% 29%;
+
+    --grounded: 0 84% 60%;
+    --grounded-light: 0 86% 94%;
+    --grounded-dark: 0 74% 35%;
+
+    /* Task Status Colors */
+    --scheduled: 217 91% 60%;
+    --scheduled-light: 214 100% 93%;
+    --scheduled-dark: 224 76% 40%;
+
+    --in-progress: 38 92% 50%;
+    --in-progress-light: 48 96% 89%;
+    --in-progress-dark: 32 81% 29%;
+
+    --completed: 160 84% 39%;
+    --completed-light: 152 76% 91%;
+    --completed-dark: 163 94% 20%;
+
+    --cancelled: 220 9% 46%;
+    --cancelled-light: 220 14% 96%;
+    --cancelled-dark: 218 11% 27%;
+
+    /* Animation durations */
+    --duration-fast: 100ms;
+    --duration-normal: 200ms;
+    --duration-slow: 300ms;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 217 91% 60%;
+
+    /* Dark mode status colors (brighter for visibility) */
+    --operational: 160 72% 59%;
+    --maintenance: 45 93% 56%;
+    --grounded: 0 91% 71%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+/* Typography utilities from AMSS spec */
+@layer utilities {
+  .text-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    letter-spacing: -0.02em;
+  }
+
+  .text-identifier {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+}
