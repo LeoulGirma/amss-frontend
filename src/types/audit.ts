@@ -5,6 +5,7 @@ export type AuditAction =
   | 'login'
   | 'logout'
   | 'status_change'
+  | 'state_change'
   | 'assign'
   | 'unassign'
   | 'approve'
@@ -23,6 +24,12 @@ export type AuditResource =
   | 'settings'
   | 'notification'
 
+export interface AuditChange {
+  field: string
+  oldValue: unknown
+  newValue: unknown
+}
+
 export interface AuditLogEntry {
   id: string
   action: AuditAction
@@ -32,13 +39,28 @@ export interface AuditLogEntry {
   userId: string
   userName: string
   userEmail: string
-  changes?: {
-    field: string
-    oldValue: unknown
-    newValue: unknown
-  }[]
+  changes?: AuditChange[]
   metadata?: Record<string, unknown>
   ipAddress?: string
   userAgent?: string
   timestamp: string
+}
+
+// Helper to check if a string is a valid AuditAction
+export function isValidAuditAction(action: string): action is AuditAction {
+  const validActions: AuditAction[] = [
+    'create', 'update', 'delete', 'login', 'logout',
+    'status_change', 'state_change', 'assign', 'unassign',
+    'approve', 'reject', 'export', 'import'
+  ]
+  return validActions.includes(action as AuditAction)
+}
+
+// Helper to check if a string is a valid AuditResource
+export function isValidAuditResource(resource: string): resource is AuditResource {
+  const validResources: AuditResource[] = [
+    'aircraft', 'task', 'part', 'user', 'team',
+    'compliance', 'report', 'settings', 'notification'
+  ]
+  return validResources.includes(resource as AuditResource)
 }

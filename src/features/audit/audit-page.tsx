@@ -16,6 +16,7 @@ import {
   Settings,
   Bell,
   Users,
+  AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,10 +37,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-// Collapsible removed - using simple state toggle for better table structure
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useAppSelector } from '@/app/store'
 import { AdvancedFilters, type FilterValue, type FilterField } from '@/components/advanced-filters'
+import { useGetAuditLogsQuery, useGetUsersQuery } from '@/lib/api'
+import { transformAuditLogs } from '@/lib/audit-transform'
 import type { AuditAction, AuditResource, AuditLogEntry } from '@/types/audit'
 
 const actionColors: Record<AuditAction, string> = {
@@ -49,6 +52,7 @@ const actionColors: Record<AuditAction, string> = {
   login: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   logout: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
   status_change: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+  state_change: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
   assign: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
   unassign: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
   approve: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
@@ -224,10 +228,30 @@ function AuditEntryRow({ entry }: { entry: AuditLogEntry }) {
 }
 
 export function AuditPage() {
-  const { entries } = useAppSelector((state) => state.audit)
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<FilterValue[]>([])
   const [timeRange, setTimeRange] = useState('all')
+
+  // Fetch audit logs and users from API
+  const {
+    data: auditLogs,
+    isLoading: isLoadingLogs,
+    error: logsError,
+    refetch: refetchLogs
+  } = useGetAuditLogsQuery({ limit: 100 })
+
+  const {
+    data: users,
+    isLoading: isLoadingUsers
+  } = useGetUsersQuery({})
+
+  // Transform API data to frontend format
+  const entries = useMemo(() => {
+    if (!auditLogs) return []
+    return transformAuditLogs(auditLogs, users || [])
+  }, [auditLogs, users])
+
+  const isLoading = isLoadingLogs || isLoadingUsers
 
   const filteredEntries = useMemo(() => {
     let result = [...entries]
@@ -332,15 +356,31 @@ export function AuditPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleExport}>
+          <Button variant="outline" onClick={handleExport} disabled={isLoading || entries.length === 0}>
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <Button variant="outline" size="icon">
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="icon" onClick={() => refetchLogs()} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
+
+      {/* Error State */}
+      {logsError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error loading audit logs</AlertTitle>
+          <AlertDescription>
+            {'status' in logsError
+              ? `Failed to fetch audit logs (${logsError.status})`
+              : 'An unexpected error occurred. Please try again.'}
+            <Button variant="link" className="h-auto p-0 ml-2" onClick={() => refetchLogs()}>
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-5">
@@ -349,7 +389,11 @@ export function AuditPage() {
             <CardDescription>Total Entries</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{stats.total}</div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -357,7 +401,11 @@ export function AuditPage() {
             <CardDescription>Last 24 Hours</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.last24h}</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className="text-2xl font-bold">{stats.last24h}</div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -365,7 +413,11 @@ export function AuditPage() {
             <CardDescription>Creates (24h)</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.creates}</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-10" />
+            ) : (
+              <div className="text-2xl font-bold text-green-600">{stats.creates}</div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -373,7 +425,11 @@ export function AuditPage() {
             <CardDescription>Updates (24h)</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats.updates}</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-10" />
+            ) : (
+              <div className="text-2xl font-bold text-blue-600">{stats.updates}</div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -381,7 +437,11 @@ export function AuditPage() {
             <CardDescription>Deletes (24h)</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.deletes}</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-10" />
+            ) : (
+              <div className="text-2xl font-bold text-red-600">{stats.deletes}</div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -443,7 +503,38 @@ export function AuditPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredEntries.length === 0 ? (
+                {isLoading ? (
+                  // Loading skeleton rows
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><div className="w-6" /></TableCell>
+                      <TableCell><Skeleton className="h-10 w-20" /></TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-8 w-8 rounded-full" />
+                          <div className="space-y-1">
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-3 w-32" />
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-6 w-6" />
+                          <Skeleton className="h-4 w-12" />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-48" />
+                        </div>
+                      </TableCell>
+                      <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : filteredEntries.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       No audit entries found

@@ -288,6 +288,19 @@ export interface ComplianceUpdateRequest {
 }
 
 // Audit Log
+export interface ApiAuditLogChange {
+  field: string
+  old_value: unknown
+  new_value: unknown
+}
+
+export interface ApiAuditLogDetails {
+  resource_name?: string
+  changes?: ApiAuditLogChange[]
+  action_type?: string
+  [key: string]: unknown
+}
+
 export interface ApiAuditLog {
   id: string
   org_id: string
@@ -300,7 +313,7 @@ export interface ApiAuditLog {
   user_agent: string
   entity_version: number
   timestamp: string
-  details: Record<string, unknown>
+  details: ApiAuditLogDetails
 }
 
 // Organization
