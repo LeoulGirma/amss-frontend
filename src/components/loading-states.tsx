@@ -171,3 +171,121 @@ export function SuspenseFallback() {
     </div>
   )
 }
+
+// Chart skeleton - for bar charts, line charts, area charts
+export function ChartSkeleton({ height = 300 }: { height?: number }) {
+  return (
+    <div className="w-full animate-pulse" style={{ height }}>
+      <div className="flex h-full items-end justify-between gap-2 px-4 pb-8">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="flex-1 flex flex-col items-center gap-2">
+            <Skeleton
+              className="w-full rounded-t"
+              style={{ height: `${30 + Math.random() * 50}%` }}
+            />
+            <Skeleton className="h-3 w-8" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Pie chart skeleton
+export function PieChartSkeleton({ size = 200 }: { size?: number }) {
+  return (
+    <div className="flex flex-col items-center justify-center animate-pulse" style={{ height: size + 60 }}>
+      <Skeleton className="rounded-full" style={{ width: size, height: size }} />
+      <div className="flex gap-4 mt-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <Skeleton className="h-3 w-3 rounded-full" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Area chart skeleton with gradient effect
+export function AreaChartSkeleton({ height = 250 }: { height?: number }) {
+  return (
+    <div className="w-full animate-pulse relative" style={{ height }}>
+      <svg className="w-full h-full" viewBox="0 0 400 200" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="skeletonGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="hsl(var(--muted))" stopOpacity="0.5" />
+            <stop offset="100%" stopColor="hsl(var(--muted))" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M0,150 Q50,120 100,130 T200,100 T300,110 T400,90 L400,200 L0,200 Z"
+          fill="url(#skeletonGradient)"
+        />
+        <path
+          d="M0,150 Q50,120 100,130 T200,100 T300,110 T400,90"
+          fill="none"
+          stroke="hsl(var(--muted))"
+          strokeWidth="2"
+        />
+      </svg>
+      <div className="absolute bottom-0 left-0 right-0 flex justify-between px-4 pb-2">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-3 w-8" />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Full page skeleton for route-level code splitting
+export function PageSkeleton() {
+  return (
+    <div className="space-y-6 p-6 animate-pulse">
+      {/* Page header skeleton */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <Skeleton className="h-10 w-32" />
+      </div>
+
+      {/* Stats cards skeleton */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i}>
+            <CardHeader className="pb-2">
+              <Skeleton className="h-4 w-24" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-8 w-16" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Main content skeleton */}
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-32" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton className="h-10 w-10 rounded" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+                <Skeleton className="h-8 w-20" />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

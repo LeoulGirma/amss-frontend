@@ -42,6 +42,7 @@ interface AircraftFormProps {
   onSubmit: (data: AircraftCreateRequest | AircraftUpdateRequest) => Promise<void>
   onDelete?: () => Promise<void>
   isLoading?: boolean
+  isDeleting?: boolean
 }
 
 const aircraftModels = [
@@ -66,6 +67,7 @@ export function AircraftForm({
   onSubmit,
   onDelete,
   isLoading = false,
+  isDeleting = false,
 }: AircraftFormProps) {
   const [formData, setFormData] = useState({
     tail_number: '',
@@ -229,8 +231,12 @@ export function AircraftForm({
             {isEditing && onDelete && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button type="button" variant="destructive" size="icon">
-                    <Trash2 className="h-4 w-4" />
+                  <Button type="button" variant="destructive" size="icon" disabled={isDeleting}>
+                    {isDeleting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -238,6 +244,7 @@ export function AircraftForm({
                     <AlertDialogTitle>Delete Aircraft</AlertDialogTitle>
                     <AlertDialogDescription>
                       Are you sure you want to delete {aircraft?.tail_number}? This action cannot be undone.
+                      All associated maintenance tasks and history will also be removed.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

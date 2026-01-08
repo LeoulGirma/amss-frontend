@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { toast } from 'sonner'
-import { Plus, Search, Filter, Calendar, Clock, User, RefreshCw, Edit } from 'lucide-react'
+import { Plus, Search, Filter, Calendar, Clock, User, RefreshCw, Edit, Trash2, Play, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Pagination } from '@/components/ui/pagination'
 import {
   Table,
   TableBody,
@@ -26,6 +28,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -39,8 +51,11 @@ import {
   useGetAircraftListQuery,
   useCreateTaskMutation,
   useUpdateTaskMutation,
+  useDeleteTaskMutation,
+  useTransitionTaskStateMutation,
   type ApiTask,
   type ApiAircraft,
+  type ApiTaskState,
 } from '@/lib/api'
 
 // Display task type for UI
@@ -185,20 +200,27 @@ export function MaintenancePage() {
   const [selectedTask, setSelectedTask] = useState<DisplayTask | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<DisplayTask | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [taskToDelete, setTaskToDelete] = useState<DisplayTask | null>(null)
+  const [transitioningTaskId, setTransitioningTaskId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
-  const { orgId } = useAppSelector((state) => state.auth)
+  const { orgId, isAuthenticated } = useAppSelector((state) => state.auth)
   const { can } = usePermissions()
   const canManageMaintenance = can('manage:maintenance')
-  const isDemo = orgId === 'demo-org' || !orgId
+  const isDemo = !isAuthenticated || !orgId
 
   // RTK Query hooks
-  const { data: apiTasks, isLoading, refetch } = useGetTasksQuery(
+  const { data: apiTasks, isLoading, error, refetch, isFetching } = useGetTasksQuery(
     { state: statusFilter === 'all' ? undefined : statusFilter },
     { skip: isDemo }
   )
   const { data: apiAircraft } = useGetAircraftListQuery({}, { skip: isDemo })
   const [createTask, { isLoading: isCreating }] = useCreateTaskMutation()
   const [updateTask, { isLoading: isUpdating }] = useUpdateTaskMutation()
+  const [deleteTask, { isLoading: isDeleting }] = useDeleteTaskMutation()
+  const [transitionTaskState] = useTransitionTaskStateMutation()
 
   // Transform API data or use mock data
   const tasks: DisplayTask[] = isDemo
@@ -208,15 +230,34 @@ export function MaintenancePage() {
         return transformTask(task, aircraft)
       })
 
-  const filteredTasks = tasks.filter((task) => {
-    const matchesStatus = statusFilter === 'all' || task.status === statusFilter
-    const matchesType = typeFilter === 'all' || task.type === typeFilter
-    const matchesSearch =
-      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.tailNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.description.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesStatus && matchesType && matchesSearch
-  })
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      const matchesStatus = statusFilter === 'all' || task.status === statusFilter
+      const matchesType = typeFilter === 'all' || task.type === typeFilter
+      const matchesSearch =
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.tailNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.description.toLowerCase().includes(searchQuery.toLowerCase())
+      return matchesStatus && matchesType && matchesSearch
+    })
+  }, [tasks, statusFilter, typeFilter, searchQuery])
+
+  // Paginate filtered tasks
+  const paginatedTasks = useMemo(() => {
+    const startIndex = (page - 1) * pageSize
+    return filteredTasks.slice(startIndex, startIndex + pageSize)
+  }, [filteredTasks, page, pageSize])
+
+  // Reset to page 1 when filters change
+  const handleFilterChange = (setter: (v: string) => void) => (value: string) => {
+    setter(value)
+    setPage(1)
+  }
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize)
+    setPage(1)
+  }
 
   const stats = {
     total: tasks.length,
@@ -268,6 +309,55 @@ export function MaintenancePage() {
     }
   }
 
+  const handleDeleteClick = (task: DisplayTask, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    setTaskToDelete(task)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!taskToDelete || isDemo) {
+      setDeleteDialogOpen(false)
+      return
+    }
+    try {
+      await deleteTask({ id: taskToDelete.id }).unwrap()
+      toast.success('Task deleted successfully')
+      setDeleteDialogOpen(false)
+      setTaskToDelete(null)
+      setSelectedTask(null)
+    } catch (error) {
+      console.error('Error deleting task:', error)
+      toast.error('Failed to delete task. Please try again.')
+    }
+  }
+
+  const handleTransitionState = async (taskId: string, newState: ApiTaskState, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    if (isDemo) {
+      toast.success(`Task ${newState === 'in_progress' ? 'started' : newState === 'completed' ? 'completed' : 'cancelled'} (demo)`)
+      return
+    }
+    setTransitioningTaskId(taskId)
+    try {
+      await transitionTaskState({
+        id: taskId,
+        data: {
+          new_state: newState,
+          allow_early_completion: true,
+          allow_late_cancel: true,
+        }
+      }).unwrap()
+      toast.success(`Task ${newState === 'in_progress' ? 'started' : newState === 'completed' ? 'completed' : 'cancelled'} successfully`)
+      setSelectedTask(null)
+    } catch (error) {
+      console.error('Error transitioning task:', error)
+      toast.error('Failed to update task status. Please try again.')
+    } finally {
+      setTransitioningTaskId(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -280,8 +370,8 @@ export function MaintenancePage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isDemo}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isDemo || isFetching}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
           </Button>
           <PermissionGate permission="manage:maintenance">
             <Button onClick={handleCreateClick}>
@@ -291,6 +381,15 @@ export function MaintenancePage() {
           </PermissionGate>
         </div>
       </div>
+
+      {/* Error Alert */}
+      {error && !isDemo && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Failed to load maintenance tasks. Please try again.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -355,8 +454,8 @@ export function MaintenancePage() {
             className="pl-10"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px]">
+        <Select value={statusFilter} onValueChange={handleFilterChange(setStatusFilter)}>
+          <SelectTrigger className="w-full sm:w-[150px]">
             <Filter className="mr-2 h-4 w-4" />
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -368,8 +467,8 @@ export function MaintenancePage() {
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[150px]">
+        <Select value={typeFilter} onValueChange={handleFilterChange(setTypeFilter)}>
+          <SelectTrigger className="w-full sm:w-[150px]">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
@@ -383,8 +482,8 @@ export function MaintenancePage() {
 
       {/* Tasks Table */}
       <Card>
-        <CardContent className="p-0">
-          <Table>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table className="min-w-[800px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Task</TableHead>
@@ -411,14 +510,14 @@ export function MaintenancePage() {
                     <TableCell><Skeleton className="h-8 w-8" /></TableCell>
                   </TableRow>
                 ))
-              ) : filteredTasks.length === 0 ? (
+              ) : paginatedTasks.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                    No tasks found
+                    {filteredTasks.length === 0 ? 'No tasks found' : 'No tasks on this page'}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredTasks.map((task) => (
+                paginatedTasks.map((task) => (
                   <TableRow
                     key={task.id}
                     className="cursor-pointer hover:bg-muted/50"
@@ -470,18 +569,73 @@ export function MaintenancePage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {canManageMaintenance && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEditClick(task)
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {/* State transition buttons */}
+                        {canManageMaintenance && task.status === 'scheduled' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Start Task"
+                            disabled={transitioningTaskId === task.id}
+                            onClick={(e) => handleTransitionState(task.id, 'in_progress', e)}
+                          >
+                            {transitioningTaskId === task.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Play className="h-4 w-4 text-blue-600" />
+                            )}
+                          </Button>
+                        )}
+                        {canManageMaintenance && task.status === 'in_progress' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Complete Task"
+                            disabled={transitioningTaskId === task.id}
+                            onClick={(e) => handleTransitionState(task.id, 'completed', e)}
+                          >
+                            {transitioningTaskId === task.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            )}
+                          </Button>
+                        )}
+                        {canManageMaintenance && (task.status === 'scheduled' || task.status === 'in_progress') && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Cancel Task"
+                            disabled={transitioningTaskId === task.id}
+                            onClick={(e) => handleTransitionState(task.id, 'cancelled', e)}
+                          >
+                            <XCircle className="h-4 w-4 text-red-600" />
+                          </Button>
+                        )}
+                        {canManageMaintenance && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Edit Task"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditClick(task)
+                            }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canManageMaintenance && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Delete Task"
+                            onClick={(e) => handleDeleteClick(task, e)}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -490,6 +644,18 @@ export function MaintenancePage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {filteredTasks.length > 0 && (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={filteredTasks.length}
+          onPageChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+          pageSizeOptions={[10, 25, 50]}
+        />
+      )}
 
       {/* Task Detail Dialog */}
       <Dialog open={!!selectedTask} onOpenChange={() => setSelectedTask(null)}>
@@ -550,14 +716,60 @@ export function MaintenancePage() {
                 <p>{selectedTask.description}</p>
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
+                {/* State transition buttons */}
+                {canManageMaintenance && selectedTask.status === 'scheduled' && (
+                  <Button
+                    variant="outline"
+                    disabled={transitioningTaskId === selectedTask.id}
+                    onClick={() => handleTransitionState(selectedTask.id, 'in_progress')}
+                  >
+                    {transitioningTaskId === selectedTask.id ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="mr-2 h-4 w-4" />
+                    )}
+                    Start Task
+                  </Button>
+                )}
+                {canManageMaintenance && selectedTask.status === 'in_progress' && (
+                  <Button
+                    variant="outline"
+                    className="text-green-600 border-green-600 hover:bg-green-50"
+                    disabled={transitioningTaskId === selectedTask.id}
+                    onClick={() => handleTransitionState(selectedTask.id, 'completed')}
+                  >
+                    {transitioningTaskId === selectedTask.id ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                    )}
+                    Complete
+                  </Button>
+                )}
+                {canManageMaintenance && (selectedTask.status === 'scheduled' || selectedTask.status === 'in_progress') && (
+                  <Button
+                    variant="outline"
+                    className="text-red-600 border-red-600 hover:bg-red-50"
+                    onClick={() => handleTransitionState(selectedTask.id, 'cancelled')}
+                  >
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Cancel
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => setSelectedTask(null)}>
                   Close
                 </Button>
                 {canManageMaintenance && (
                   <Button onClick={() => handleEditClick(selectedTask)}>
                     <Edit className="mr-2 h-4 w-4" />
-                    Edit Task
+                    Edit
+                  </Button>
+                )}
+                {canManageMaintenance && (
+                  <Button variant="destructive" onClick={() => handleDeleteClick(selectedTask)}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
                   </Button>
                 )}
               </div>
@@ -565,6 +777,40 @@ export function MaintenancePage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Task</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this task? This action cannot be undone.
+              {taskToDelete && (
+                <span className="block mt-2 font-medium text-foreground">
+                  {taskToDelete.title} - {taskToDelete.tailNumber}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Task Form */}
       <TaskForm

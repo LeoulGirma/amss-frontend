@@ -4,9 +4,16 @@ import { Sidebar } from './sidebar'
 import { Header } from './header'
 import { MobileNav } from '@/components/mobile-nav'
 import { cn } from '@/lib/utils'
+import { useRealtimeSync, useNotificationToast } from '@/hooks'
 
 export function MainLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  // Initialize WebSocket connection for real-time updates
+  useRealtimeSync()
+
+  // Show toast notifications for new alerts
+  useNotificationToast()
 
   return (
     <div className="min-h-screen bg-background">

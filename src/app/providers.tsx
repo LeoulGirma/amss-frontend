@@ -7,6 +7,7 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { OfflineIndicator, PWAInstallPrompt, UpdatePrompt } from '@/components/pwa-prompt'
 import { OnboardingTour } from '@/components/onboarding-tour'
 import { PendingKeyIndicator } from '@/components/keyboard-shortcuts'
+import { ThemeProvider } from '@/contexts/theme-context'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,24 +25,26 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
-      <Provider store={store}>
-        <QueryClientProvider client={queryClient}>
-          <OfflineIndicator />
-          {children}
-          <OnboardingTour />
-          <PWAInstallPrompt />
-          <UpdatePrompt />
-          <PendingKeyIndicator />
-          <Toaster
-            position="top-right"
-            richColors
-            closeButton
-            toastOptions={{
-              duration: 4000,
-            }}
-          />
-        </QueryClientProvider>
-      </Provider>
+      <ThemeProvider defaultTheme="system" storageKey="theme">
+        <Provider store={store}>
+          <QueryClientProvider client={queryClient}>
+            <OfflineIndicator />
+            {children}
+              <OnboardingTour />
+            <PWAInstallPrompt />
+            <UpdatePrompt />
+            <PendingKeyIndicator />
+            <Toaster
+              position="top-right"
+              richColors
+              closeButton
+              toastOptions={{
+                duration: 4000,
+              }}
+            />
+          </QueryClientProvider>
+        </Provider>
+      </ThemeProvider>
     </ErrorBoundary>
   )
 }

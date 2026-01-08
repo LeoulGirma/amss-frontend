@@ -333,8 +333,8 @@ export function CompliancePage() {
       )}
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search compliance items..."
@@ -344,7 +344,7 @@ export function CompliancePage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-full sm:w-[160px]">
             <Filter className="mr-2 h-4 w-4" />
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -372,8 +372,8 @@ export function CompliancePage() {
 
       {/* Compliance Table */}
       <Card>
-        <CardContent className="p-0">
-          <Table>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table className="min-w-[700px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>

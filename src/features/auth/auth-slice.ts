@@ -7,6 +7,7 @@ interface AuthState {
   refreshToken: string | null
   isAuthenticated: boolean
   isLoading: boolean
+  isInitialized: boolean
   orgId: string | null
 }
 
@@ -22,6 +23,7 @@ const initialState: AuthState = {
   refreshToken: storedRefreshToken,
   isAuthenticated: !!storedToken,
   isLoading: false,
+  isInitialized: !storedToken, // If no token, we're already initialized (will redirect to login)
   orgId: storedOrgId,
 }
 
@@ -46,6 +48,7 @@ const authSlice = createSlice({
       }
       state.token = action.payload.token
       state.isAuthenticated = true
+      state.isInitialized = true
       localStorage.setItem('token', action.payload.token)
 
       if (action.payload.refreshToken) {
@@ -71,6 +74,7 @@ const authSlice = createSlice({
       state.token = null
       state.refreshToken = null
       state.isAuthenticated = false
+      state.isInitialized = true
       state.orgId = null
       localStorage.removeItem('token')
       localStorage.removeItem('refresh_token')
@@ -80,8 +84,11 @@ const authSlice = createSlice({
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.isLoading = action.payload
     },
+    setInitialized: (state, action: PayloadAction<boolean>) => {
+      state.isInitialized = action.payload
+    },
   },
 })
 
-export const { setCredentials, setUser, setOrgId, logout, setLoading } = authSlice.actions
+export const { setCredentials, setUser, setOrgId, logout, setLoading, setInitialized } = authSlice.actions
 export default authSlice.reducer

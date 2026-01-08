@@ -8,11 +8,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import { TaskStatusBadge, TaskPriorityBadge } from '@/components/task-status-badge'
 import { MaintenanceCalendar } from './maintenance-calendar'
+import { useAppSelector } from '@/app/store'
+import { useGetTasksQuery, useGetAircraftListQuery } from '@/lib/api'
 import type { MaintenanceTask, MaintenanceType } from '@/types'
 
 // Mock data for when API is unavailable
@@ -117,15 +120,54 @@ const typeLabels: Record<MaintenanceType, string> = {
   engine: 'Engine',
 }
 
+// Map API task type to MaintenanceType
+const typeMap: Record<string, MaintenanceType> = {
+  inspection: 'a_check',
+  repair: 'component',
+  overhaul: 'engine',
+}
+
 export function CalendarPage() {
   const [selectedTask, setSelectedTask] = useState<MaintenanceTask | null>(null)
 
-  // For now, just use mock data - API integration would require type transformation
-  const isLoading = false
-  const usingMockData = true
-  const tasks = mockTasks
+  const { orgId, isAuthenticated } = useAppSelector((state) => state.auth)
+  const isDemo = !isAuthenticated || !orgId
 
-  const refetch = () => {}
+  // RTK Query hooks
+  const { data: apiTasks, isLoading, error, refetch, isFetching } = useGetTasksQuery(
+    {},
+    { skip: isDemo }
+  )
+  const { data: apiAircraft } = useGetAircraftListQuery({}, { skip: isDemo })
+
+  // Transform API tasks to MaintenanceTask format
+  const tasks: MaintenanceTask[] = isDemo
+    ? mockTasks
+    : (apiTasks || []).map(task => {
+        const aircraft = apiAircraft?.find(a => a.id === task.aircraft_id)
+        return {
+          id: task.id,
+          title: `${task.type.charAt(0).toUpperCase() + task.type.slice(1)} - ${aircraft?.tail_number || 'Unknown'}`,
+          description: task.notes || 'No description',
+          tailNumber: aircraft?.tail_number || 'Unknown',
+          aircraftType: aircraft?.model || 'Unknown',
+          aircraftId: task.aircraft_id,
+          type: typeMap[task.type] || 'line',
+          status: task.state === 'in_progress' ? 'in_progress' : task.state as 'scheduled' | 'completed' | 'cancelled',
+          priority: 'medium',
+          scheduledStart: task.start_time.split('T')[0],
+          scheduledEnd: task.end_time.split('T')[0],
+          assignedTo: task.assigned_mechanic_id ? ['Assigned Mechanic'] : [],
+          estimatedHours: Math.round((new Date(task.end_time).getTime() - new Date(task.start_time).getTime()) / (1000 * 60 * 60)),
+          location: 'Hangar',
+          partsRequired: [],
+          complianceItems: [],
+          notes: task.notes || '',
+          createdBy: 'system',
+          createdAt: task.created_at,
+          updatedAt: task.updated_at,
+        }
+      })
 
   return (
     <div className="space-y-6">
@@ -135,15 +177,24 @@ export function CalendarPage() {
           <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
           <p className="text-muted-foreground">
             View maintenance schedule
-            {usingMockData && (
-              <span className="ml-2 text-xs text-maintenance">(Demo Data)</span>
+            {isDemo && (
+              <span className="ml-2 text-xs text-amber-600">(Demo Data)</span>
             )}
           </p>
         </div>
-        <Button variant="outline" size="icon" onClick={() => refetch()}>
-          <RefreshCw className="h-4 w-4" />
+        <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isDemo || isFetching}>
+          <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
         </Button>
       </div>
+
+      {/* Error Alert */}
+      {error && !isDemo && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Failed to load calendar tasks. Please try again.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Calendar */}
       {isLoading ? (

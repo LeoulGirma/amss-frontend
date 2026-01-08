@@ -114,11 +114,11 @@ export function TeamPage() {
   const { can } = usePermissions()
   const canManageTeam = can('manage:team')
 
-  const { orgId } = useAppSelector((state) => state.auth)
-  const isDemo = orgId === 'demo-org' || !orgId
+  const { orgId, isAuthenticated } = useAppSelector((state) => state.auth)
+  const isDemo = !isAuthenticated || !orgId
 
   // RTK Query hooks
-  const { data: apiUsers, isLoading, refetch } = useGetUsersQuery(
+  const { data: apiUsers, isLoading, refetch, isFetching } = useGetUsersQuery(
     { role: roleFilter === 'all' ? undefined : roleFilter },
     { skip: isDemo }
   )
@@ -218,8 +218,8 @@ export function TeamPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isDemo}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isDemo || isFetching}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
           </Button>
           <PermissionGate permission="manage:team">
             <Button onClick={handleAddClick} disabled={isDemo}>
@@ -283,8 +283,8 @@ export function TeamPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search team members..."
@@ -294,7 +294,7 @@ export function TeamPage() {
           />
         </div>
         <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <Shield className="mr-2 h-4 w-4" />
             <SelectValue placeholder="Filter by role" />
           </SelectTrigger>

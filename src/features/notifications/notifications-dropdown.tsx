@@ -184,9 +184,9 @@ export function NotificationsDropdown() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="justify-center text-primary cursor-pointer"
-              onClick={() => navigate('/settings')}
+              onClick={() => navigate('/notifications')}
             >
-              Notification Settings
+              View All Notifications
             </DropdownMenuItem>
           </>
         )}

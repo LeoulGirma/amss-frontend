@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Search, Filter, RefreshCw } from 'lucide-react'
+import { Plus, Search, Filter, RefreshCw, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Table,
   TableBody,
@@ -146,23 +147,24 @@ export function FleetPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [selectedAircraft, setSelectedAircraft] = useState<ApiAircraft | null>(null)
 
-  const { orgId } = useAppSelector((state) => state.auth)
+  const { orgId, isAuthenticated } = useAppSelector((state) => state.auth)
   const { can } = usePermissions()
   const canManageFleet = can('manage:fleet')
-  const isDemo = orgId === 'demo-org' || !orgId
+  const isDemo = !isAuthenticated || !orgId
 
   // RTK Query hooks
-  const { data: apiData, isLoading, isError, refetch } = useGetAircraftListQuery(
+  const { data: apiData, isLoading, error, refetch, isFetching } = useGetAircraftListQuery(
     { status: statusFilter === 'all' ? undefined : statusFilter },
     { skip: isDemo }
   )
   const [createAircraft, { isLoading: isCreating }] = useCreateAircraftMutation()
   const [updateAircraft, { isLoading: isUpdating }] = useUpdateAircraftMutation()
-  const [deleteAircraft] = useDeleteAircraftMutation()
+  const [deleteAircraft, { isLoading: isDeleting }] = useDeleteAircraftMutation()
 
-  // Use API data or fallback to mock data
+  // Use API data or fallback to mock data for unauthenticated users
   const aircraft = isDemo ? mockAircraft : (apiData || [])
-  const usingMockData = isDemo || isError || !apiData
+  const usingMockData = isDemo
+  const hasError = !isDemo && !!error
 
   const filteredAircraft = aircraft.filter((a) => {
     const matchesStatus = statusFilter === 'all' || a.status === statusFilter
@@ -237,8 +239,13 @@ export function FleetPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isDemo}>
-            <RefreshCw className="h-4 w-4" />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => refetch()}
+            disabled={isDemo || isFetching}
+          >
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
           </Button>
           <PermissionGate permission="manage:fleet">
             <Button onClick={handleAddClick}>
@@ -248,6 +255,22 @@ export function FleetPage() {
           </PermissionGate>
         </div>
       </div>
+
+      {/* Error State */}
+      {hasError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error loading fleet data</AlertTitle>
+          <AlertDescription>
+            {'status' in error
+              ? `Failed to fetch aircraft (${error.status})`
+              : 'An unexpected error occurred. Please try again.'}
+            <Button variant="link" className="h-auto p-0 ml-2" onClick={() => refetch()}>
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -302,8 +325,8 @@ export function FleetPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search by tail number or model..."
@@ -313,7 +336,7 @@ export function FleetPage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <Filter className="mr-2 h-4 w-4" />
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
@@ -328,8 +351,8 @@ export function FleetPage() {
 
       {/* Aircraft Table */}
       <Card>
-        <CardContent className="p-0">
-          <Table>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table className="min-w-[600px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Tail Number</TableHead>
@@ -341,7 +364,7 @@ export function FleetPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && !isDemo ? (
+              {(isLoading || (isFetching && aircraft.length === 0)) && !isDemo ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
                     <TableCell><Skeleton className="h-4 w-20" /></TableCell>
@@ -397,6 +420,7 @@ export function FleetPage() {
         onSubmit={handleSubmit}
         onDelete={selectedAircraft ? () => handleDelete(selectedAircraft.id) : undefined}
         isLoading={isCreating || isUpdating}
+        isDeleting={isDeleting}
       />
     </div>
   )

@@ -40,9 +40,11 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Pagination } from '@/components/ui/pagination'
 import { AdvancedFilters, type FilterValue, type FilterField } from '@/components/advanced-filters'
 import { useGetAuditLogsQuery, useGetUsersQuery } from '@/lib/api'
 import { transformAuditLogs } from '@/lib/audit-transform'
+import { exportToCSV, formatDateForExport } from '@/lib/export-utils'
 import type { AuditAction, AuditResource, AuditLogEntry } from '@/types/audit'
 
 const actionColors: Record<AuditAction, string> = {
@@ -231,14 +233,20 @@ export function AuditPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<FilterValue[]>([])
   const [timeRange, setTimeRange] = useState('all')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+
+  // Calculate offset for API
+  const offset = (page - 1) * pageSize
 
   // Fetch audit logs and users from API
   const {
     data: auditLogs,
     isLoading: isLoadingLogs,
+    isFetching,
     error: logsError,
     refetch: refetchLogs
-  } = useGetAuditLogsQuery({ limit: 100 })
+  } = useGetAuditLogsQuery({ limit: pageSize, offset })
 
   const {
     data: users,
@@ -319,27 +327,23 @@ export function AuditPage() {
   }, [entries])
 
   const handleExport = () => {
-    const csv = [
-      ['Timestamp', 'User', 'Action', 'Resource', 'Resource Name', 'Resource ID'].join(','),
-      ...filteredEntries.map((e) =>
-        [
-          e.timestamp,
-          e.userName,
-          e.action,
-          e.resource,
-          e.resourceName,
-          e.resourceId,
-        ].join(',')
-      ),
-    ].join('\n')
+    if (filteredEntries.length === 0) return
 
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `audit-log-${format(new Date(), 'yyyy-MM-dd')}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    exportToCSV(filteredEntries, 'audit-log', [
+      { key: 'timestamp', header: 'Timestamp', format: (v) => formatDateForExport(v as string) },
+      { key: 'userName', header: 'User' },
+      { key: 'userEmail', header: 'Email' },
+      { key: 'action', header: 'Action' },
+      { key: 'resource', header: 'Resource' },
+      { key: 'resourceName', header: 'Resource Name' },
+      { key: 'resourceId', header: 'Resource ID' },
+    ])
+  }
+
+  // Handle page size change - reset to page 1
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize)
+    setPage(1)
   }
 
   return (
@@ -360,8 +364,8 @@ export function AuditPage() {
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <Button variant="outline" size="icon" onClick={() => refetchLogs()} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <Button variant="outline" size="icon" onClick={() => refetchLogs()} disabled={isLoading || isFetching}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
@@ -459,7 +463,7 @@ export function AuditPage() {
         </div>
 
         <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-full sm:w-[150px]">
             <SelectValue placeholder="Time range" />
           </SelectTrigger>
           <SelectContent>
@@ -485,11 +489,11 @@ export function AuditPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Activity History</CardTitle>
           <CardDescription>
-            Showing {filteredEntries.length} of {entries.length} entries
+            {isLoading ? 'Loading...' : `Showing ${filteredEntries.length} entries (Page ${page})`}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-[600px]">
+        <CardContent className="space-y-4">
+          <ScrollArea className="h-[500px]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -548,6 +552,15 @@ export function AuditPage() {
               </TableBody>
             </Table>
           </ScrollArea>
+
+          {/* Pagination */}
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={entries.length > 0 ? entries.length + (entries.length === pageSize ? pageSize : 0) : 0}
+            onPageChange={setPage}
+            onPageSizeChange={handlePageSizeChange}
+          />
         </CardContent>
       </Card>
     </div>

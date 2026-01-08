@@ -1,4 +1,5 @@
 export { NotificationsDropdown } from './notifications-dropdown'
+export { NotificationsPage } from './notifications-page'
 export {
   default as notificationsReducer,
   addNotification,

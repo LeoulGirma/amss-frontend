@@ -58,20 +58,21 @@ export function PartsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const { orgId } = useAppSelector((state) => state.auth)
-  const isDemo = orgId === 'demo-org' || !orgId
+  const { orgId, isAuthenticated } = useAppSelector((state) => state.auth)
+  const isDemo = !isAuthenticated || !orgId
 
   // RTK Query
-  const { data: apiDefinitions, isLoading: isLoadingDefs, refetch: refetchDefs } = useGetPartDefinitionsQuery(
+  const { data: apiDefinitions, isLoading: isLoadingDefs, refetch: refetchDefs, isFetching: isFetchingDefs } = useGetPartDefinitionsQuery(
     {},
     { skip: isDemo }
   )
-  const { data: apiItems, isLoading: isLoadingItems, refetch: refetchItems } = useGetPartItemsQuery(
+  const { data: apiItems, isLoading: isLoadingItems, refetch: refetchItems, isFetching: isFetchingItems } = useGetPartItemsQuery(
     { status: statusFilter === 'all' ? undefined : statusFilter },
     { skip: isDemo }
   )
 
   const isLoading = isLoadingDefs || isLoadingItems
+  const isFetching = isFetchingDefs || isFetchingItems
 
   const refetch = () => {
     refetchDefs()
@@ -135,8 +136,8 @@ export function PartsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={refetch} disabled={isDemo}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="icon" onClick={refetch} disabled={isDemo || isFetching}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
           </Button>
           <PermissionGate permission="manage:parts">
             <Button>
@@ -215,8 +216,8 @@ export function PartsPage() {
       )}
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search by serial number or name..."
@@ -226,7 +227,7 @@ export function PartsPage() {
           />
         </div>
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <Filter className="mr-2 h-4 w-4" />
             <SelectValue placeholder="Category" />
           </SelectTrigger>
@@ -240,7 +241,7 @@ export function PartsPage() {
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-full sm:w-[150px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -254,8 +255,8 @@ export function PartsPage() {
 
       {/* Parts Table */}
       <Card>
-        <CardContent className="p-0">
-          <Table>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table className="min-w-[600px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Serial Number</TableHead>

@@ -1,5 +1,5 @@
-/// <reference types="vitest" />
-import { defineConfig } from 'vite'
+/// <reference types="vitest/config" />
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
@@ -40,19 +40,19 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: '/pwa-192x192.png',
+            src: '/pwa-192x192.svg',
             sizes: '192x192',
-            type: 'image/png',
+            type: 'image/svg+xml',
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/pwa-512x512.svg',
             sizes: '512x512',
-            type: 'image/png',
+            type: 'image/svg+xml',
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/pwa-512x512.svg',
             sizes: '512x512',
-            type: 'image/png',
+            type: 'image/svg+xml',
             purpose: 'any maskable',
           },
         ],
@@ -82,5 +82,44 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React core
+          'react-vendor': ['react', 'react-dom'],
+          // React Router
+          'router': ['react-router', 'react-router-dom'],
+          // Redux ecosystem
+          'redux': ['@reduxjs/toolkit', 'react-redux'],
+          // UI libraries
+          'radix': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-label',
+            '@radix-ui/react-select',
+            '@radix-ui/react-separator',
+            '@radix-ui/react-slot',
+            '@radix-ui/react-tooltip',
+            '@radix-ui/react-scroll-area',
+            '@radix-ui/react-alert-dialog',
+            '@radix-ui/react-progress',
+            '@radix-ui/react-collapsible',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-avatar',
+          ],
+          // Form handling
+          'forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
+          // Icons
+          'icons': ['lucide-react'],
+          // Date utilities
+          'date': ['date-fns'],
+          // Charts library (used by dashboard)
+          'charts': ['recharts'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 500,
   },
 })
