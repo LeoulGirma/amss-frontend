@@ -25,6 +25,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TaskPriorityBadge } from '@/components/task-status-badge'
+import { useAppSelector } from '@/app/store'
+import {
+  useGetTasksQuery,
+  useGetAircraftListQuery,
+  useTransitionTaskStateMutation,
+  type ApiTask,
+  type ApiAircraft,
+  type ApiTaskState,
+} from '@/lib/api'
 import type { MaintenanceTask, TaskStatus } from '@/types'
 
 // Column configuration
@@ -281,16 +290,64 @@ function KanbanColumn({
   )
 }
 
+// Transform API task to kanban MaintenanceTask
+function transformTaskForKanban(task: ApiTask, aircraft?: ApiAircraft): MaintenanceTask {
+  const typeMap: Record<string, MaintenanceTask['type']> = {
+    inspection: 'a_check',
+    repair: 'component',
+    overhaul: 'c_check',
+  }
+  return {
+    id: task.id,
+    title: `${task.type.charAt(0).toUpperCase() + task.type.slice(1)} Task`,
+    description: task.notes || 'No description',
+    tailNumber: aircraft?.tail_number || 'Unknown',
+    aircraftType: aircraft?.model || 'Unknown',
+    aircraftId: task.aircraft_id,
+    type: typeMap[task.type] || 'component',
+    status: task.state as TaskStatus,
+    priority: 'medium',
+    scheduledStart: task.start_time.split('T')[0],
+    scheduledEnd: task.end_time.split('T')[0],
+    assignedTo: task.assigned_mechanic_id ? ['Assigned'] : [],
+    estimatedHours: Math.round((new Date(task.end_time).getTime() - new Date(task.start_time).getTime()) / (1000 * 60 * 60)),
+    location: 'Hangar',
+    partsRequired: [],
+    complianceItems: [],
+    notes: task.notes || '',
+    createdBy: 'system',
+    createdAt: task.created_at,
+    updatedAt: task.updated_at,
+  }
+}
+
 export function KanbanBoard() {
   const [activeTask, setActiveTask] = useState<MaintenanceTask | null>(null)
   const [localTasks, setLocalTasks] = useState<MaintenanceTask[]>(mockTasks)
 
-  // For now, just use local state with mock data - API integration would require type transformation
-  const isLoading = false
-  const usingMockData = true
-  const tasks = localTasks
+  const { orgId, isAuthenticated } = useAppSelector((state) => state.auth)
+  const isDemo = !isAuthenticated || !orgId
 
-  const refetch = () => {}
+  // RTK Query hooks
+  const { data: apiTasks, isLoading: apiLoading, refetch: apiRefetch } = useGetTasksQuery(
+    {},
+    { skip: isDemo }
+  )
+  const { data: apiAircraft } = useGetAircraftListQuery({}, { skip: isDemo })
+  const [transitionTaskState] = useTransitionTaskStateMutation()
+
+  const isLoading = isDemo ? false : apiLoading
+  const usingMockData = isDemo
+
+  // Transform API data or use mock data
+  const tasks: MaintenanceTask[] = isDemo
+    ? localTasks
+    : (apiTasks || []).map((task) => {
+        const aircraft = apiAircraft?.find((a) => a.id === task.aircraft_id)
+        return transformTaskForKanban(task, aircraft)
+      })
+
+  const refetch = isDemo ? () => {} : apiRefetch
 
   // Group tasks by status (only show main workflow columns)
   const tasksByStatus = useMemo(() => {
@@ -337,8 +394,8 @@ export function KanbanBoard() {
     // Check if dropping over a column
     const overColumn = columns.find((c) => c.id === over.id)
     if (overColumn && activeTask.status !== overColumn.id) {
-      // Update local state immediately for responsiveness
-      if (usingMockData) {
+      // Update local state immediately for responsiveness (demo mode only)
+      if (isDemo) {
         setLocalTasks((prev: MaintenanceTask[]) =>
           prev.map((t: MaintenanceTask) =>
             t.id === activeTask.id ? { ...t, status: overColumn.id as TaskStatus } : t
@@ -373,20 +430,32 @@ export function KanbanBoard() {
     }
 
     if (targetStatus && activeTask.status !== targetStatus) {
-      // Update local state for demo mode
-      setLocalTasks((prev: MaintenanceTask[]) =>
-        prev.map((t: MaintenanceTask) =>
-          t.id === activeTask.id ? { ...t, status: targetStatus! } : t
-        )
-      )
-
       const statusLabels: Record<string, string> = {
         scheduled: 'Scheduled',
         in_progress: 'In Progress',
         completed: 'Completed',
       }
 
-      toast.success(`Task moved to ${statusLabels[targetStatus]}`)
+      if (isDemo) {
+        // Update local state for demo mode
+        setLocalTasks((prev: MaintenanceTask[]) =>
+          prev.map((t: MaintenanceTask) =>
+            t.id === activeTask.id ? { ...t, status: targetStatus! } : t
+          )
+        )
+        toast.success(`Task moved to ${statusLabels[targetStatus]}`)
+      } else {
+        // Call API to transition task state
+        try {
+          await transitionTaskState({
+            id: activeTask.id,
+            data: { new_state: targetStatus as ApiTaskState },
+          }).unwrap()
+          toast.success(`Task moved to ${statusLabels[targetStatus]}`)
+        } catch {
+          toast.error('Failed to update task status')
+        }
+      }
     }
   }
 

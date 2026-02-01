@@ -19,43 +19,55 @@ This guide covers deploying and managing the AMSS application on Kubernetes (k3s
 ## Architecture Overview
 
 ```
-                                    ┌─────────────────────────────────────────┐
-                                    │              Kubernetes (k3s)           │
-                                    │                                         │
-  Internet                          │  ┌─────────────────────────────────┐   │
-     │                              │  │     ingress-nginx-controller     │   │
-     │                              │  │        (ports 80, 443)           │   │
-     ▼                              │  └──────────────┬──────────────────┘   │
-┌─────────┐                         │                 │                       │
-│   DNS   │                         │    ┌────────────┴────────────┐         │
-│ Records │                         │    │                         │         │
-└────┬────┘                         │    ▼                         ▼         │
-     │                              │  ┌─────────────┐    ┌─────────────┐    │
-     │  amss.leoulgirma.com ────────┼─▶│  Frontend   │    │   Backend   │◀───┼── amss-api-uat.duckdns.org
-     │  amss-api-uat.duckdns.org ───┼──┼─────────────┼───▶│   (Go API)  │    │
-     │                              │  │  (nginx)    │    └──────┬──────┘    │
-     │                              │  └─────────────┘           │           │
-     │                              │                            ▼           │
-     │                              │                    ┌─────────────┐     │
-     │                              │                    │  PostgreSQL │     │
-     │                              │                    │    Redis    │     │
-     │                              │                    └─────────────┘     │
-     │                              │                     (Docker on host)   │
-     │                              └─────────────────────────────────────────┘
-     │
-     └──────────────────────────────▶ 51.79.85.92 (Host IP)
+                              Internet (51.79.85.92)
+                                 │
+                    ┌────────────┴────────────┐
+                    │                         │
+          amss.leoulgirma.com     amss-api-uat.duckdns.org
+                    │                         │
+                    ▼                         ▼
+          ┌───────────────────────────────────────────┐
+          │        SafeLine WAF (Docker)               │
+          │     Tengine + t1k module (ports 80/443)    │
+          └──────────┬────────────────────┬────────────┘
+                     │                    │
+      IF_backend_3   │                    │  IF_backend_4
+                     ▼                    ▼
+          ┌──────────────────┐  ┌──────────────────────────┐
+          │  Host Nginx      │  │  K8s ingress-nginx       │
+          │  (port 8080)     │  │  (NodePort 30443/HTTPS)  │
+          │                  │  │                          │
+          │  /var/www/amss/  │  │  ┌────────────────────┐  │
+          │  ├── React SPA   │  │  │  amss-server Pod   │  │
+          │  └── marketing/  │  │  │  (Go, port 8080)   │  │
+          │      (Astro)     │  │  └────────┬───────────┘  │
+          └──────────────────┘  │           │              │
+                                │  ┌────────┴───────────┐  │
+                                │  │  amss-worker Pod   │  │
+                                │  └────────────────────┘  │
+                                └──────────────────────────┘
+                                            │
+                                            ▼
+                                ┌─────────────────────────┐
+                                │  PostgreSQL + Redis      │
+                                │  (Docker on host)        │
+                                └─────────────────────────┘
 ```
+
+**Note:** SafeLine WAF owns ports 80/443. The ingress-nginx controller is exposed via NodePort (30080/HTTP, 30443/HTTPS) instead of hostPort. SafeLine proxies API traffic to the NodePort.
 
 ### Components
 
 | Component | Type | Namespace | Description |
 |-----------|------|-----------|-------------|
-| Frontend | Deployment | amss-uat | React SPA served by nginx |
-| Backend | Deployment | amss-uat | Go API server |
-| Ingress Controller | DaemonSet | ingress-nginx | nginx ingress handling SSL/routing |
+| Frontend | Deployment | amss-uat | React SPA served by K8s nginx (also served from host nginx at /var/www/amss/) |
+| Backend (amss-server) | Deployment | amss-uat | Go API server (HTTP 8080, gRPC 9090) |
+| Worker (amss-worker) | Deployment | amss-uat | Background job processor |
+| Ingress Controller | Deployment | ingress-nginx | nginx ingress, NodePort 30080/30443 |
 | Cert Manager | Deployment | cert-manager | Automatic SSL certificate management |
+| SafeLine WAF | Docker Compose | host | Tengine + detector on ports 80/443 |
 | PostgreSQL | Docker | host | Database (external to k8s) |
-| Redis | Docker | host | Cache/session store (external to k8s) |
+| Redis | Docker | host | Cache/session store with Sentinel HA (external to k8s) |
 
 ---
 
@@ -118,7 +130,7 @@ kubectl get pods,svc,ingress,configmap,secret -n amss-uat
 
 ## Deploying the Frontend
 
-### Step 1: Build the Frontend
+### Step 1: Build and Deploy the Frontend
 
 ```bash
 cd /home/ubuntu/amss-frontend
@@ -132,6 +144,20 @@ npm run build
 # Copy build files to web root
 sudo cp -r dist/* /var/www/amss/
 ```
+
+### Step 1b: Build and Deploy the Marketing Site
+
+```bash
+cd /home/ubuntu/amss-marketing
+
+npm install
+npm run build
+
+# Copy to the marketing subdirectory (served at /marketing/ path)
+sudo cp -r dist/* /var/www/amss/marketing/
+```
+
+**Important:** The frontend's `vite.config.ts` includes `navigateFallbackDenylist: [/^\/marketing/]` in the Workbox config to prevent the SPA service worker from intercepting marketing page navigation.
 
 ### Step 2: Create Kubernetes Manifests
 

@@ -484,6 +484,12 @@ const baseQueryWithReauth: BaseQueryFn<
   unknown,
   FetchBaseQueryError
 > = async (args, api, extraOptions) => {
+  // Skip API calls entirely for demo tokens
+  const token = (api.getState() as RootState).auth.token
+  if (token?.startsWith('demo-token-')) {
+    return { error: { status: 403, data: 'Demo mode' } as FetchBaseQueryError }
+  }
+
   let result = await baseQuery(args, api, extraOptions)
 
   if (result.error && result.error.status === 401) {

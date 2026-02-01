@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 import {
   Search,
   Filter,
@@ -9,6 +10,7 @@ import {
   Calendar,
   RefreshCw,
   ExternalLink,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +40,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
+import { useAppSelector } from '@/app/store'
+import {
+  useGetComplianceItemsQuery,
+  useSignOffComplianceItemMutation,
+  type ApiComplianceItem,
+} from '@/lib/api'
 import type { ComplianceItem, ComplianceStatus, ComplianceCategory } from '@/types'
 
 const statusConfig: Record<ComplianceStatus, { label: string; color: string; icon: typeof CheckCircle }> = {
@@ -169,6 +177,28 @@ const mockComplianceItems: ComplianceItem[] = [
   },
 ]
 
+// Transform API compliance item to frontend type
+function transformComplianceItem(item: ApiComplianceItem): ComplianceItem {
+  const statusMap: Record<string, ComplianceStatus> = {
+    pass: 'compliant',
+    fail: 'overdue',
+    pending: 'pending',
+  }
+  return {
+    id: item.id,
+    title: item.description,
+    description: item.description,
+    category: 'inspection' as ComplianceCategory,
+    status: item.signed_off ? 'compliant' : (statusMap[item.result] || 'pending'),
+    dueDate: new Date().toISOString(),
+    regulatoryReference: `Task ${item.task_id}`,
+    priority: item.result === 'fail' ? 'high' : 'medium',
+    notes: '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 function ComplianceStatusBadge({ status }: { status: ComplianceStatus }) {
   const config = statusConfig[status]
   const Icon = config.icon
@@ -200,12 +230,23 @@ export function CompliancePage() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [selectedItem, setSelectedItem] = useState<ComplianceItem | null>(null)
 
-  // Use mock data for demo mode
-  const isLoading = false
-  const usingMockData = true
-  const complianceItems = mockComplianceItems
+  const { orgId, isAuthenticated } = useAppSelector((state) => state.auth)
+  const isDemo = !isAuthenticated || !orgId
 
-  const refetch = () => {}
+  // RTK Query hooks
+  const { data: apiItems, isLoading: apiLoading, refetch: apiRefetch } = useGetComplianceItemsQuery(
+    {},
+    { skip: isDemo }
+  )
+  const [signOff, { isLoading: isSigningOff }] = useSignOffComplianceItemMutation()
+
+  const isLoading = isDemo ? false : apiLoading
+  const usingMockData = isDemo
+  const complianceItems: ComplianceItem[] = isDemo
+    ? mockComplianceItems
+    : (apiItems || []).map(transformComplianceItem)
+
+  const refetch = isDemo ? () => {} : apiRefetch
 
   const filteredItems = complianceItems.filter((item: ComplianceItem) => {
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter
@@ -533,7 +574,26 @@ export function CompliancePage() {
                     Close
                   </Button>
                   {selectedItem.status !== 'compliant' && (
-                    <Button>Mark as Compliant</Button>
+                    <Button
+                      disabled={isSigningOff}
+                      onClick={async () => {
+                        if (isDemo) {
+                          toast.success('Marked as compliant (demo)')
+                          setSelectedItem(null)
+                        } else {
+                          try {
+                            await signOff(selectedItem.id).unwrap()
+                            toast.success('Compliance item signed off')
+                            setSelectedItem(null)
+                          } catch {
+                            toast.error('Failed to sign off compliance item')
+                          }
+                        }
+                      }}
+                    >
+                      {isSigningOff && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Mark as Compliant
+                    </Button>
                   )}
                 </div>
               </div>

@@ -59,6 +59,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        navigateFallbackDenylist: [/^\/marketing/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/amss-api-uat\.duckdns\.org\/api\/.*/i,

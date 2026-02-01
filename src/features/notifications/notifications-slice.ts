@@ -61,8 +61,8 @@ interface NotificationsState {
 }
 
 const initialState: NotificationsState = {
-  notifications: mockNotifications,
-  unreadCount: mockNotifications.filter((n) => !n.read).length,
+  notifications: [],
+  unreadCount: 0,
 }
 
 const notificationsSlice = createSlice({
@@ -101,6 +101,10 @@ const notificationsSlice = createSlice({
       state.notifications = []
       state.unreadCount = 0
     },
+    loadDemoNotifications: (state) => {
+      state.notifications = mockNotifications
+      state.unreadCount = mockNotifications.filter((n) => !n.read).length
+    },
   },
 })
 
@@ -110,6 +114,7 @@ export const {
   markAllAsRead,
   removeNotification,
   clearAll,
+  loadDemoNotifications,
 } = notificationsSlice.actions
 
 export default notificationsSlice.reducer

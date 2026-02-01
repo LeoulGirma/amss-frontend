@@ -13,15 +13,22 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const dispatch = useAppDispatch()
   const { isAuthenticated, isInitialized, token } = useAppSelector((state) => state.auth)
   const location = useLocation()
+  const isDemo = token?.startsWith('demo-token-') ?? false
 
-  // Validate token by fetching current user
+  // Validate token by fetching current user (skip for demo tokens)
   const { isLoading, isError } = useGetMeQuery(undefined, {
-    skip: !token || isInitialized,
+    skip: !token || isInitialized || isDemo,
   })
 
   useEffect(() => {
     if (!token) {
       // No token, already initialized
+      return
+    }
+
+    if (isDemo) {
+      // Demo token, skip validation
+      dispatch(setInitialized(true))
       return
     }
 
@@ -32,7 +39,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       // Token is valid, mark as initialized
       dispatch(setInitialized(true))
     }
-  }, [isLoading, isError, token, dispatch])
+  }, [isLoading, isError, token, isDemo, dispatch])
 
   // Show loading screen while validating token
   if (token && !isInitialized) {

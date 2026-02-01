@@ -742,33 +742,39 @@ VitePWA({
   registerType: 'autoUpdate',
   workbox: {
     globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+    navigateFallbackDenylist: [/^\/marketing/],
     runtimeCaching: [
       {
-        urlPattern: /^https:\/\/api\./i,
+        urlPattern: /^https:\/\/amss-api-uat\.duckdns\.org\/api\/.*/i,
         handler: 'NetworkFirst',
         options: {
           cacheName: 'api-cache',
-          expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 },
+          expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
+          cacheableResponse: { statuses: [0, 200] },
         },
       },
     ],
   },
   manifest: {
-    name: 'AMSS - Aviation Maintenance',
+    name: 'AMSS - Aircraft Maintenance Scheduling System',
     short_name: 'AMSS',
-    theme_color: '#1e40af',
-    background_color: '#ffffff',
+    theme_color: '#0ea5e9',
+    background_color: '#0f172a',
     display: 'standalone',
+    orientation: 'portrait-primary',
     icons: [/* app icons */],
   },
 })
 ```
+
+**`navigateFallbackDenylist`:** The `/marketing` path is excluded from the Workbox `NavigationRoute` so that the SPA service worker does not intercept navigation to the Astro marketing site pages (`/marketing/`, `/marketing/features`, `/marketing/pricing`). Without this, the service worker would serve the cached React SPA `index.html` for those paths, causing React Router 404 errors.
 
 ### Features
 - Offline capability (cached assets)
 - Install prompt (Add to Home Screen)
 - Background sync
 - Push notification ready
+- Marketing site path excluded from service worker interception
 
 ---
 
@@ -1050,6 +1056,11 @@ Potential improvements for the project:
 
 | Date | Category | Change |
 |------|----------|--------|
+| Feb 1, 2026 | Infrastructure | Added amss-api-uat.duckdns.org as SafeLine WAF site (IF_backend_4), routing API through SafeLine to K8s NodePort |
+| Jan 29, 2026 | Infrastructure | Fixed SafeLine SSL cert loss after tengine restart; restored SSL config for amss.leoulgirma.com |
+| Jan 29, 2026 | Infrastructure | Built and deployed Astro marketing website at /marketing path |
+| Jan 28, 2026 | Frontend | Added `navigateFallbackDenylist: [/^\/marketing/]` to Workbox config to prevent service worker intercepting marketing pages |
+| Jan 28, 2026 | Frontend | Connected compliance page to API, kanban board to API, fixed demo mode login loop, removed mock notifications |
 | Jan 5, 2026 | Infrastructure | SafeLine WAF deployment with 7 containers |
 | Jan 3, 2026 | Frontend | Dashboard enhancements, Notifications, Profile page |
 | Jan 3, 2026 | Frontend | Auth flow fix (isInitialized), Mobile responsiveness |
@@ -1058,6 +1069,42 @@ Potential improvements for the project:
 | Dec 30, 2025 | DevOps | CI/CD workflows (GitHub Actions) |
 | Dec 30, 2025 | Frontend | Initial commit with full feature set |
 | Dec 22-28, 2025 | Backend | Go backend initial release with documentation |
+
+---
+
+## Recent Updates (January 28-29, 2026)
+
+### Marketing Website Deployment
+- Built a 3-page static marketing site using **Astro 5.x + Tailwind CSS 4.x** at `/home/ubuntu/amss-marketing/`
+- Pages: Landing (`/marketing/`), Features (`/marketing/features`), Pricing (`/marketing/pricing`)
+- Dark/premium aerospace-noir theme with CSS-only scroll animations
+- Deployed to `/var/www/amss/marketing/` under the same nginx server as the React SPA
+
+### Service Worker Fix for Marketing Pages
+- **Problem:** The Workbox service worker's `NavigationRoute` intercepted ALL navigation requests, including `/marketing/*`, and served the cached React SPA `index.html`. React Router then returned a 404 error.
+- **Fix:** Added `navigateFallbackDenylist: [/^\/marketing/]` to the VitePWA workbox config in `vite.config.ts`
+- **File changed:** `vite.config.ts` (workbox section)
+
+### Nginx Configuration Updates
+- Changed `try_files` order to `$uri $uri/index.html $uri/ /index.html` (added `$uri/index.html` before `$uri/`) to serve Astro-generated `index.html` files without 301 directory redirects
+- Added `absolute_redirect off` to prevent absolute redirect URLs
+- Added gzip compression and security headers
+
+### API Integration
+- Connected compliance page to real `/compliance-items` API with sign-off functionality
+- Connected kanban board to real `/maintenance-tasks` API with drag-and-drop state transitions
+- Fixed demo mode login loop (skip `/auth/me` for demo tokens)
+- Removed hardcoded mock notifications from initial Redux state
+
+---
+
+## Recent Updates (February 1, 2026)
+
+### SafeLine WAF: API Domain Routing
+- **Problem:** SafeLine WAF owned ports 80/443, blocking ingress-nginx from binding via hostPort. The API at `amss-api-uat.duckdns.org` was unreachable.
+- **Fix:** Added `amss-api-uat.duckdns.org` as a second site in SafeLine (IF_backend_4), proxying to ingress-nginx HTTPS NodePort (30443)
+- Extracted Let's Encrypt cert from K8s secret `amss-uat-tls` and added to SafeLine
+- Configured WebSocket support and 3600s proxy timeouts
 
 ---
 

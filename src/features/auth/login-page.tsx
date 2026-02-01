@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useAppDispatch } from '@/app/store'
 import { useTheme } from '@/hooks'
 import { setCredentials, setUser } from './auth-slice'
+import { loadDemoNotifications } from '@/features/notifications/notifications-slice'
 import { useLoginMutation, useLookupEmailMutation, useLazyGetMeQuery, type ApiUser, type OrgInfo } from '@/lib/api'
 
 type LoginStep = 'email' | 'password'
@@ -159,6 +160,7 @@ export function LoginPage() {
         orgId: 'demo-org',
       })
     )
+    dispatch(loadDemoNotifications())
     navigate('/')
   }
 
