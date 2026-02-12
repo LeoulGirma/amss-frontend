@@ -26,15 +26,15 @@ export function transformAuditLog(
     resource = apiLog.entity_type
   }
 
-  // Transform changes array
-  const changes: AuditChange[] | undefined = apiLog.details.changes?.map(change => ({
+  // Transform changes array (handle null details)
+  const changes: AuditChange[] | undefined = apiLog.details?.changes?.map(change => ({
     field: change.field,
     oldValue: change.old_value,
     newValue: change.new_value,
   }))
 
   // Extract metadata (everything except resource_name and changes)
-  const { resource_name, changes: _, ...metadata } = apiLog.details
+  const { resource_name, changes: _, ...metadata } = apiLog.details || {}
   const hasMetadata = Object.keys(metadata).length > 0
 
   return {
@@ -42,7 +42,7 @@ export function transformAuditLog(
     action,
     resource,
     resourceId: apiLog.entity_id,
-    resourceName: apiLog.details.resource_name || apiLog.entity_id,
+    resourceName: apiLog.details?.resource_name || apiLog.entity_id,
     userId: apiLog.user_id,
     userName: user?.email?.split('@')[0] || 'Unknown User',
     userEmail: user?.email || 'unknown@example.com',
